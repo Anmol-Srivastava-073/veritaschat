@@ -7,6 +7,3 @@ dependencies = [
     "flask-cors",
     "groq"
 ]
-
-[tool.vercel]
-entrypoint = "api/index.py"
