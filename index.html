@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Veritas - Clinical Assistant</title>
+
+  <link rel="icon" type="image/png" href="image/veritasai.png" />
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    @import url("https://fonts.googleapis.com/css2?family=Raleway:wght@300;500;700&display=swap");
+
+    body {
+      font-family: "Raleway", sans-serif;
+      background-color: #83c5be;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+
+    .chat-container {
+      width: 100%;
+      max-width: 700px;
+      height: 90vh;
+      display: flex;
+      flex-direction: column;
+      background: white;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+    }
+
+    header {
+      background-color: #006d77;
+    }
+
+    #chat-window {
+      flex-grow: 1;
+      overflow-y: auto;
+      padding: 24px;
+      background-color: #f9fafb;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .chat-bubble-container {
+      position: relative;
+      display: flex;
+      max-width: 85%;
+    }
+
+    .chat-bubble {
+      padding: 12px 18px;
+      border-radius: 20px;
+      line-height: 1.5;
+      word-wrap: break-word;
+    }
+
+    .bot-container {
+      padding-left: 45px;
+    }
+
+    .bot-container::before {
+      content: "";
+      left: 0;
+      background-image: url("image/bot.png");
+      background-size: cover;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+    }
+
+    .bot-message {
+      background: #e0f2f7;
+      border: 1px solid #d1d5db;
+    }
+
+    .user-container {
+      justify-content: flex-end;
+      margin-left: auto;
+      padding-right: 45px;
+    }
+
+    .user-container::after {
+      content: "";
+      right: 0;
+      background-image: url("image/user.png");
+      background-size: cover;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+    }
+
+    .user-message {
+      background: #3b82f6;
+      color: white;
+    }
+
+    #send-button {
+      background-color: #006d77;
+    }
+
+    #send-button:hover {
+      background-color: #005b66;
+    }
+
+    #typing-indicator {
+      font-style: italic;
+      color: #006d77;
+      font-weight: 500;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="chat-container">
+
+  <!-- HEADER -->
+  <header class="text-white p-4 flex justify-between items-center">
+    <div>
+      <h1 class="text-xl font-bold">⚕️ Veritas - Clinical Assistant</h1>
+      <p class="text-sm opacity-80">Collecting Pre-Consultation Patient History</p>
+    </div>
+
+    <button id="new-chat-button"
+      class="bg-white/20 px-4 py-2 rounded-lg hover:bg-white/30">
+      New Chat
+    </button>
+  </header>
+
+  <!-- CHAT WINDOW -->
+  <div id="chat-window"></div>
+
+  <!-- INPUT -->
+  <div class="p-4 bg-white border-t flex flex-col gap-3">
+
+    <!-- DYNAMIC STATUS TEXT OBJECT -->
+    <div id="typing-indicator" class="hidden flex items-center gap-2">
+      <span class="animate-pulse">⏳</span> <span id="status-text">Veritas is initializing...</span>
+    </div>
+
+    <form id="chat-form" class="flex">
+      <input id="message-input"
+        type="text"
+        placeholder="Type a message to start the chat..."
+        class="flex-grow p-3 border rounded-l-xl"
+        required />
+
+      <button type="submit" id="send-button"
+        class="text-white px-6 rounded-r-xl">
+        Send
+      </button>
+    </form>
+  </div>
+
+</div>
+
+<script>
+  const chatWindow = document.getElementById("chat-window");
+  const chatForm = document.getElementById("chat-form");
+  const messageInput = document.getElementById("message-input");
+  const typingIndicator = document.getElementById("typing-indicator");
+  const statusText = document.getElementById("status-text");
+  const newChatButton = document.getElementById("new-chat-button");
+
+  const API_URL = "/api/chat";
+  let messageHistory = [];
+
+  function scrollToBottom() {
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+  }
+
+  // Update status wrapper to output what the system engine is executing
+  function showStatus(text) {
+    statusText.innerText = text;
+    typingIndicator.classList.remove("hidden");
+  }
+
+  function hideStatus() {
+    typingIndicator.classList.add("hidden");
+  }
+
+  function displayGreeting() {
+    const defaultGreeting = "Hello, I am Veritas, your Pre-Consultation Clinical Assistant. Please describe your main symptoms or health concerns in detail so I can help prepare an organized medical history summary for your doctor.";
+    addMessage(defaultGreeting, "bot");
+  }
+
+  function addMessage(text, sender) {
+    const container = document.createElement("div");
+    container.className =
+      `chat-bubble-container ${sender === "user" ? "user-container" : "bot-container"}`;
+
+    const bubble = document.createElement("div");
+    bubble.className =
+      `chat-bubble ${sender === "user" ? "user-message" : "bot-message"}`;
+
+    bubble.innerHTML = text.replace(/\n/g, "<br>");
+    container.appendChild(bubble);
+    chatWindow.appendChild(container);
+
+    scrollToBottom();
+    return bubble;
+  }
+
+  async function sendChat(userText) {
+    // Stage 1: Thinking and Analyzing Input
+    showStatus("Veritas is thinking...");
+    messageHistory.push({ role: "user", content: userText });
+
+    // Switch state after 1.2 seconds to simulate analyzing context before hitting endpoint
+    setTimeout(() => {
+      if(!typingIndicator.classList.contains("hidden") && statusText.innerText === "Veritas is thinking...") {
+        showStatus("Veritas is analyzing medical context...");
+      }
+    }, 1200);
+
+    try {
+      const response = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile",
+          messages: messageHistory
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error("Could not connect to the clinical backend server.");
+      }
+
+      // Stage 2: Processing Complete, actively preparing output response data streams
+      showStatus("Veritas is synthesizing clinical evaluation...");
+
+      const botBubble = addMessage("", "bot");
+      let fullBotResponse = "";
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let done = false;
+
+      // First chunk arrived, drop the processing status wrapper completely
+      let isFirstChunk = true;
+
+      while (!done) {
+        const { value, done: readerDone } = await reader.read();
+        done = readerDone;
+        
+        const chunkText = decoder.decode(value, { stream: !done });
+        fullBotResponse += chunkText;
+        
+        if (isFirstChunk && chunkText.trim().length > 0) {
+          hideStatus(); // Clear thinking text once stream starts typing out
+          isFirstChunk = false;
+        }
+
+        botBubble.innerHTML = fullBotResponse.replace(/\n/g, "<br>");
+        scrollToBottom();
+      }
+
+      messageHistory.push({ role: "assistant", content: fullBotResponse });
+
+    } catch (error) {
+      hideStatus();
+      addMessage("⚠️ System Error: Unable to fetch response from backend.", "bot");
+      console.error("Streaming error:", error);
+    }
+  }
+
+  chatForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const msg = messageInput.value.trim();
+    if (!msg) return;
+
+    addMessage(msg, "user");
+    messageInput.value = "";
+
+    await sendChat(msg);
+  });
+
+  newChatButton.addEventListener("click", () => {
+    chatWindow.innerHTML = "";
+    messageHistory = [];
+    displayGreeting();
+  });
+
+  document.addEventListener("DOMContentLoaded", displayGreeting);
+</script>
+
+</body>
+</html>
